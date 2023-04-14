@@ -4,15 +4,39 @@
 #include <BLE2902.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
+#include "MAX30100_PulseOximeter.h"
 
 
 //BLE server name
 #define bleServerName "ESP32_BLE_SERVER"
 
-
 // Timer variables
 unsigned long lastTime = 0;
 unsigned long timerDelay = 30000;
+
+// Sensor measures variables
+float temperature; // from LM35
+float saturation; // from MAX30100
+float pulse; // from MAX30100
+float alcohol; // from MQ3
+
+// LM35 variables
+const int LM35analogIn = A0;
+int LM35RawValue= 0;
+float LM35Voltage = 0;
+float LM35tempC = 0;
+
+// MAX30100 variables
+// Create a PulseOximeter object
+PulseOximeter pox;
+// Callback routine is executed when a pulse is detected
+void onBeatDetected() {
+    Serial.println("♥ Beat!");
+}
+
+// MQ3 variables
+const int MQ3analogIn = A3;
+
 
 bool deviceConnected = false;
 
@@ -46,12 +70,25 @@ class MyServerCallbacks: public BLEServerCallbacks {
   }
 };
 
-// TODO:
 void initSensors(){
-  // if (!bme.begin(0x76)) {
-  //   Serial.println("Could not find a valid BME280 sensor, check wiring!");
-  //   while (1);
-  // }
+  Serial.print("Initializing pulse oximeter...");
+
+  // Initialize sensor
+  if (!pox.begin()) {
+      Serial.println("FAILED");
+      for(;;);
+  } else {
+      Serial.println("SUCCESS");
+  }
+
+  // Configure sensor to use 7.6mA for LED drive
+  pox.setIRLedCurrent(MAX30100_LED_CURR_7_6MA);
+
+  // Register a callback routine
+  pox.setOnBeatDetectedCallback(onBeatDetected);
+
+  Serial.println("MQ3 is warming up...");
+  delay(120000);  //2 min warm up time
 }
 
 ///////////////////////////////// SETUP BEGIN ////////////////////////////////////////
@@ -107,12 +144,19 @@ void setup() {
 void loop() {
     if (deviceConnected) {
       if ((millis() - lastTime) > timerDelay) {
-        // TODO: Read the sensors (get random number for now)
-        float temperature = getRandomNumber(34, 40); // from LM35
-        float saturation = getRandomNumber(90, 100); // from MAX30100
-        float pulse = getRandomNumber(60, 100); // from MAX30100
+        // TODO: Read the sensors (get random number for now)        
+        temperature = getRandomNumber(34, 40); // from LM35
+
+        pox.update();
+        // temperature = readTemperatureFromLM35();
+        saturation = getRandomNumber(90, 100); // from MAX30100
+        //saturation = pox.getSpO2();
+        pulse = getRandomNumber(60, 100); // from MAX30100
+        //pulse = pox.getHeartRate();
+
         // TODO: Handle reading from alcohol sensor separately ?!
-        float alcohol = getRandomNumber(0, 1); // from MQ-3
+        alcohol = getRandomNumber(0, 1); // from MQ3
+        // alcohol = analogRead(MQ3analogIn);
 
         // Print the sensors values
         Serial.println("==================================");
@@ -164,6 +208,12 @@ void loop() {
 }
 ///////////////////////////////// LOOP END ///////////////////////////////////////////
 
+float readTemperatureFromLM35() {
+  LM35RawValue = analogRead(LM35analogIn);
+  LM35Voltage = (LM35RawValue / 2048.0) * 3300;
+  LM35tempC = LM35Voltage * 0.1;
+  return LM35tempC;
+}
 
 // Function to get random number from given range
 float getRandomNumber(int min, int max) {
