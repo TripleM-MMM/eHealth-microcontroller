@@ -146,9 +146,9 @@ void loop() {
       if ((millis() - lastTime) > timerDelay) {
         // TODO: Read the sensors (get random number for now)        
         temperature = getRandomNumber(34, 40); // from LM35
+        // temperature = readTemperatureFromLM35();
 
         pox.update();
-        // temperature = readTemperatureFromLM35();
         saturation = getRandomNumber(90, 100); // from MAX30100
         //saturation = pox.getSpO2();
         pulse = getRandomNumber(60, 100); // from MAX30100
