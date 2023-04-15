@@ -7,7 +7,7 @@
 #include "MAX30100_PulseOximeter.h"
 
 
-//BLE server name
+// BLE server name
 #define bleServerName "ESP32_BLE_SERVER"
 
 // Timer variables
@@ -27,8 +27,8 @@ float LM35Voltage = 0;
 float LM35tempC = 0;
 
 // MAX30100 variables
-// Create a PulseOximeter object
 PulseOximeter pox;
+
 // Callback routine is executed when a pulse is detected
 void onBeatDetected() {
     Serial.println("♥ Beat!");
@@ -37,6 +37,10 @@ void onBeatDetected() {
 // MQ3 variables
 const int MQ3analogIn = A3;
 
+// Pushbutton to start measuring alcohol
+const int pushButtonPin = 15;
+unsigned long lastTimeAlcoholMeasured = 0;
+unsigned long timeToMeasureAlcohol = 5000;
 
 bool deviceConnected = false;
 
@@ -64,9 +68,11 @@ BLEDescriptor alcoholDescriptor(BLEUUID((uint16_t)0x2905));
 class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
+    Serial.println("Device connected!");
   };
   void onDisconnect(BLEServer* pServer) {
     deviceConnected = false;
+    Serial.println("Device disconnected!");
   }
 };
 
@@ -89,6 +95,9 @@ void initSensors(){
 
   Serial.println("MQ3 is warming up...");
   delay(120000);  //2 min warm up time
+
+  // Declare pushButtonPin as digital input 
+  pinMode(pushButtonPin, INPUT);
 }
 
 ///////////////////////////////// SETUP BEGIN ////////////////////////////////////////
@@ -144,19 +153,49 @@ void setup() {
 void loop() {
     if (deviceConnected) {
       if ((millis() - lastTime) > timerDelay) {
-        // TODO: Read the sensors (get random number for now)        
-        temperature = getRandomNumber(34, 40); // from LM35
-        // temperature = readTemperatureFromLM35();
+        // TODO: Read the sensors (get random number for now)
+        //////////////// TEMPERATURE ////////////////
+        temperature = getRandomNumber(34, 40); // TODO: remove this line
+        // temperature = readTemperatureFromLM35(); // TODO: uncomment this line
+        static char temperatureCTemp[6];
+        dtostrf(temperature, 6, 2, temperatureCTemp);
+        //Set temperature Characteristic value and notify connected client
+        temperatureCelsiusCharacteristics.setValue(temperatureCTemp);
+        temperatureCelsiusCharacteristics.notify();
 
+        //////////////// SATURATION and PULSE ////////////////
         pox.update();
-        saturation = getRandomNumber(90, 100); // from MAX30100
-        //saturation = pox.getSpO2();
-        pulse = getRandomNumber(60, 100); // from MAX30100
-        //pulse = pox.getHeartRate();
+        saturation = getRandomNumber(90, 100); // TODO: remove this line
+        //saturation = pox.getSpO2(); // TODO: uncomment this line
+        static char saturationTemp[6];
+        dtostrf(saturation, 6, 2, saturationTemp);
+        //Set saturation Characteristic value and notify connected client
+        saturationCharacteristics.setValue(saturationTemp);
+        saturationCharacteristics.notify();
 
-        // TODO: Handle reading from alcohol sensor separately ?!
-        alcohol = getRandomNumber(0, 1); // from MQ3
-        // alcohol = analogRead(MQ3analogIn);
+        pulse = getRandomNumber(60, 100); // TODO: remove this line
+        //pulse = pox.getHeartRate(); // TODO: uncomment this line
+        static char pulseTemp[6];
+        dtostrf(pulse, 6, 2, pulseTemp);
+        //Set pulse Characteristic value and notify connected client
+        pulseCharacteristics.setValue(pulseTemp);
+        pulseCharacteristics.notify();
+
+        //////////////// ALCOHOL ////////////////
+        // TODO: Handle reading from alcohol sensor on button click
+        int pushButtonState = digitalRead(pushButtonPin);
+        if (pushButtonState == HIGH && millis() - lastTimeAlcoholMeasured > timeToMeasureAlcohol) {
+          lastTimeAlcoholMeasured = millis();          
+        }
+        if (millis() - lastTimeAlcoholMeasured <= timeToMeasureAlcohol) {
+          alcohol = getRandomNumber(0, 1); // TODO: remove this line
+          // alcohol = analogRead(MQ3analogIn); // TODO: uncomment this line
+          static char alcoholTemp[6];
+          dtostrf(alcohol, 6, 2, alcoholTemp);
+          //Set alcohol Characteristic value and notify connected client
+          alcoholCharacteristics.setValue(alcoholTemp);
+          alcoholCharacteristics.notify(); 
+        }
 
         // Print the sensors values
         Serial.println("==================================");
@@ -172,35 +211,7 @@ void loop() {
         Serial.print("Alcohol: ");
         Serial.print(alcohol);
         Serial.println(" BAC");
-        Serial.println("==================================");
-    
-        //Notify temperature reading from sensor
-        static char temperatureCTemp[6];
-        dtostrf(temperature, 6, 2, temperatureCTemp);
-        //Set temperature Characteristic value and notify connected client
-        temperatureCelsiusCharacteristics.setValue(temperatureCTemp);
-        temperatureCelsiusCharacteristics.notify();
-        
-        //Notify saturation reading from sensor
-        static char saturationTemp[6];
-        dtostrf(saturation, 6, 2, saturationTemp);
-        //Set saturation Characteristic value and notify connected client
-        saturationCharacteristics.setValue(saturationTemp);
-        saturationCharacteristics.notify();
-
-        //Notify pulse reading from sensor
-        static char pulseTemp[6];
-        dtostrf(pulse, 6, 2, pulseTemp);
-        //Set pulse Characteristic value and notify connected client
-        pulseCharacteristics.setValue(pulseTemp);
-        pulseCharacteristics.notify();   
-
-        //Notify alcohol reading from sensor
-        static char alcoholTemp[6];
-        dtostrf(alcohol, 6, 2, alcoholTemp);
-        //Set alcohol Characteristic value and notify connected client
-        alcoholCharacteristics.setValue(alcoholTemp);
-        alcoholCharacteristics.notify();   
+        Serial.println("==================================");  
         
         lastTime = millis();
       }
@@ -215,7 +226,6 @@ float readTemperatureFromLM35() {
   return LM35tempC;
 }
 
-// Function to get random number from given range
 float getRandomNumber(int min, int max) {
     return (float)rand() / (float)RAND_MAX * (max - min) + min;
 }
