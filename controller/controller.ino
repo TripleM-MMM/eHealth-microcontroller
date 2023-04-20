@@ -105,7 +105,7 @@ void setup() {
     Serial.begin(115200);
     Serial.println("SET UP!");
 
-    initSensors();
+    //initSensors();
 
     // Create the BLE Device
     BLEDevice::init(bleServerName);
@@ -164,7 +164,7 @@ void loop() {
         temperatureCelsiusCharacteristics.notify();
 
         //////////////// SATURATION and PULSE ////////////////
-        pox.update();
+        //pox.update();
         saturation = getRandomNumber(90, 100); // TODO: remove this line
         //saturation = pox.getSpO2(); // TODO: uncomment this line
         static char saturationTemp[6];
