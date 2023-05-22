@@ -21,7 +21,7 @@ float pulse; // from MAX30100
 float alcohol; // from MQ3
 
 // LM35 variables
-const int LM35analogIn = A0;
+const int LM35analogIn = A6;
 int LM35RawValue= 0;
 float LM35Voltage = 0;
 float LM35tempC = 0;
@@ -155,8 +155,8 @@ void loop() {
       if ((millis() - lastTime) > timerDelay) {
         // TODO: Read the sensors (get random number for now)
         //////////////// TEMPERATURE ////////////////
-        temperature = getRandomNumber(34, 40); // TODO: remove this line
-        // temperature = readTemperatureFromLM35(); // TODO: uncomment this line
+        //temperature = getRandomNumber(34, 40); // TODO: remove this line
+        temperature = readTemperatureFromLM35(); // TODO: uncomment this line
         static char temperatureCTemp[6];
         dtostrf(temperature, 6, 2, temperatureCTemp);
         //Set temperature Characteristic value and notify connected client
