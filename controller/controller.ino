@@ -4,7 +4,10 @@
 #include <BLE2902.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
-#include "MAX30100_PulseOximeter.h"
+//#include "MAX30100_PulseOximeter.h"
+#include "MAX30105.h"
+
+#include "heartRate.h"
 
 
 // BLE server name
@@ -27,7 +30,14 @@ float LM35Voltage = 0;
 float LM35tempC = 0;
 
 // MAX30100 variables
-PulseOximeter pox;
+//PulseOximeter pox;
+MAX30105 particleSensor;
+const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
+byte rates[RATE_SIZE]; //Array of heart rates
+byte rateSpot = 0;
+long lastBeat = 0; //Time at which the last beat occurred
+float beatsPerMinute;
+int beatAvg;
 
 // Callback routine is executed when a pulse is detected
 void onBeatDetected() {
@@ -35,12 +45,16 @@ void onBeatDetected() {
 }
 
 // MQ3 variables
-const int MQ3analogIn = A3;
+const int MQ3analogIn = A7;
 
 // Pushbutton to start measuring alcohol
 const int pushButtonPin = 15;
 unsigned long lastTimeAlcoholMeasured = 0;
 unsigned long timeToMeasureAlcohol = 5000;
+
+// Led to show measuring alcohol
+const int ledPin = 2;
+bool measuringAlcohol = false;
 
 bool deviceConnected = false;
 
@@ -77,27 +91,28 @@ class MyServerCallbacks: public BLEServerCallbacks {
 };
 
 void initSensors(){
-  Serial.print("Initializing pulse oximeter...");
+  //Serial.print("Initializing pulse oximeter...");
 
   // Initialize sensor
-  if (!pox.begin()) {
-      Serial.println("FAILED");
-      for(;;);
-  } else {
-      Serial.println("SUCCESS");
-  }
+  // if (!pox.begin()) {
+  //     Serial.println("FAILED");
+  //     for(;;);
+  // } else {
+  //     Serial.println("SUCCESS");
+  // }
 
-  // Configure sensor to use 7.6mA for LED drive
-  pox.setIRLedCurrent(MAX30100_LED_CURR_7_6MA);
+  // // Configure sensor to use 7.6mA for LED drive
+  // pox.setIRLedCurrent(MAX30100_LED_CURR_7_6MA);
 
-  // Register a callback routine
-  pox.setOnBeatDetectedCallback(onBeatDetected);
+  // // Register a callback routine
+  // pox.setOnBeatDetectedCallback(onBeatDetected);
 
   Serial.println("MQ3 is warming up...");
-  delay(120000);  //2 min warm up time
+  //delay(120000);  //2 min warm up time
 
   // Declare pushButtonPin as digital input 
   pinMode(pushButtonPin, INPUT);
+  pinMode(ledPin, OUTPUT);
 }
 
 ///////////////////////////////// SETUP BEGIN ////////////////////////////////////////
@@ -105,7 +120,20 @@ void setup() {
     Serial.begin(115200);
     Serial.println("SET UP!");
 
-    //initSensors();
+    initSensors();
+    //
+    // Initialize sensor
+    // if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) //Use default I2C port, 400kHz speed
+    // {
+    //   Serial.println("MAX30102 was not found. Please check wiring/power. ");
+    //   while (1);
+    // }
+    // Serial.println("Place your index finger on the sensor with steady pressure.");
+
+    // particleSensor.setup(); //Configure sensor with default settings
+    // particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
+    // particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
+    //
 
     // Create the BLE Device
     BLEDevice::init(bleServerName);
@@ -181,22 +209,6 @@ void loop() {
         pulseCharacteristics.setValue(pulseTemp);
         pulseCharacteristics.notify();
 
-        //////////////// ALCOHOL ////////////////
-        // TODO: Handle reading from alcohol sensor on button click
-        int pushButtonState = digitalRead(pushButtonPin);
-        if (pushButtonState == HIGH && millis() - lastTimeAlcoholMeasured > timeToMeasureAlcohol) {
-          lastTimeAlcoholMeasured = millis();          
-        }
-        if (millis() - lastTimeAlcoholMeasured <= timeToMeasureAlcohol) {
-          alcohol = getRandomNumber(0, 1); // TODO: remove this line
-          // alcohol = analogRead(MQ3analogIn); // TODO: uncomment this line
-          static char alcoholTemp[6];
-          dtostrf(alcohol, 6, 2, alcoholTemp);
-          //Set alcohol Characteristic value and notify connected client
-          alcoholCharacteristics.setValue(alcoholTemp);
-          alcoholCharacteristics.notify(); 
-        }
-
         // Print the sensors values
         Serial.println("==================================");
         Serial.print("Temperature: ");
@@ -208,14 +220,74 @@ void loop() {
         Serial.print("Pulse: ");
         Serial.print(pulse);
         Serial.println(" BPM");
-        Serial.print("Alcohol: ");
-        Serial.print(alcohol);
-        Serial.println(" BAC");
         Serial.println("==================================");  
         
         lastTime = millis();
       }
+      //////////////// ALCOHOL ////////////////
+      // TODO: Handle reading from alcohol sensor on button click
+      int pushButtonState = digitalRead(pushButtonPin);
+      if (pushButtonState == HIGH && millis() - lastTimeAlcoholMeasured > timeToMeasureAlcohol) {
+        lastTimeAlcoholMeasured = millis();     
+        digitalWrite(ledPin, HIGH);
+        measuringAlcohol = true;
+        Serial.println("Now measuring alcohol until the LED is ON");     
+      }
+      if (millis() - lastTimeAlcoholMeasured <= timeToMeasureAlcohol && measuringAlcohol == true) {
+        alcohol = getRandomNumber(0, 1); // TODO: remove this line
+        //alcohol = analogRead(MQ3analogIn); // TODO: uncomment this line
+        static char alcoholTemp[6];
+        dtostrf(alcohol, 6, 2, alcoholTemp);
+        //Set alcohol Characteristic value and notify connected client
+        alcoholCharacteristics.setValue(alcoholTemp);
+        alcoholCharacteristics.notify(); 
+
+        Serial.println("==================================");  
+        Serial.print("Alcohol: ");
+        Serial.print(alcohol);
+        // Serial.println(" BAC");
+        Serial.println("==================================");
+      } else {
+        digitalWrite(ledPin, LOW);
+        measuringAlcohol = false;        
+      }
+      //
+      // long irValue = particleSensor.getIR();
+
+      // if (checkForBeat(irValue) == true)
+      // {
+      //   //We sensed a beat!
+      //   long delta = millis() - lastBeat;
+      //   lastBeat = millis();
+
+      //   beatsPerMinute = 60 / (delta / 1000.0);
+
+      //   if (beatsPerMinute < 255 && beatsPerMinute > 20)
+      //   {
+      //     rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
+      //     rateSpot %= RATE_SIZE; //Wrap variable
+
+      //     //Take average of readings
+      //     beatAvg = 0;
+      //     for (byte x = 0 ; x < RATE_SIZE ; x++)
+      //       beatAvg += rates[x];
+      //     beatAvg /= RATE_SIZE;
+      //   }
+      // }
+
+      // Serial.print("IR=");
+      // Serial.print(irValue);
+      // Serial.print(", BPM=");
+      // Serial.print(beatsPerMinute);
+      // Serial.print(", Avg BPM=");
+      // Serial.print(beatAvg);
+
+      // if (irValue < 50000)
+      //   Serial.print(" No finger?");
+
+      // Serial.println();
   }
+  delay(1000);
 }
 ///////////////////////////////// LOOP END ///////////////////////////////////////////
 
