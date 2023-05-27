@@ -4,7 +4,6 @@
 #include <BLE2902.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
-//#include "MAX30100_PulseOximeter.h"
 #include "MAX30105.h"
 
 #include "heartRate.h"
@@ -29,8 +28,7 @@ int LM35RawValue= 0;
 float LM35Voltage = 0;
 float LM35tempC = 0;
 
-// MAX30100 variables
-//PulseOximeter pox;
+// MAX30102 variables
 MAX30105 particleSensor;
 const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
 byte rates[RATE_SIZE]; //Array of heart rates
@@ -91,24 +89,21 @@ class MyServerCallbacks: public BLEServerCallbacks {
 };
 
 void initSensors(){
-  //Serial.print("Initializing pulse oximeter...");
+  Serial.println("Initializing pulse oximeter...");
+  // if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) //Use default I2C port, 400kHz speed
+    // {
+    //   Serial.println("MAX30102 was not found. Please check wiring/power. ");
+    //   while (1);
+    // }
+    // Serial.println("Place your index finger on the sensor with steady pressure.");
 
-  // Initialize sensor
-  // if (!pox.begin()) {
-  //     Serial.println("FAILED");
-  //     for(;;);
-  // } else {
-  //     Serial.println("SUCCESS");
-  // }
-
-  // // Configure sensor to use 7.6mA for LED drive
-  // pox.setIRLedCurrent(MAX30100_LED_CURR_7_6MA);
-
-  // // Register a callback routine
-  // pox.setOnBeatDetectedCallback(onBeatDetected);
+    // particleSensor.setup(); //Configure sensor with default settings
+    // particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
+    // particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
+    //
 
   Serial.println("MQ3 is warming up...");
-  //delay(120000);  //2 min warm up time
+  delay(120000);  //2 min warm up time
 
   // Declare pushButtonPin as digital input 
   pinMode(pushButtonPin, INPUT);
@@ -121,19 +116,6 @@ void setup() {
     Serial.println("SET UP!");
 
     initSensors();
-    //
-    // Initialize sensor
-    // if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) //Use default I2C port, 400kHz speed
-    // {
-    //   Serial.println("MAX30102 was not found. Please check wiring/power. ");
-    //   while (1);
-    // }
-    // Serial.println("Place your index finger on the sensor with steady pressure.");
-
-    // particleSensor.setup(); //Configure sensor with default settings
-    // particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
-    // particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
-    //
 
     // Create the BLE Device
     BLEDevice::init(bleServerName);
@@ -181,7 +163,6 @@ void setup() {
 void loop() {
     if (deviceConnected) {
       if ((millis() - lastTime) > timerDelay) {
-        // TODO: Read the sensors (get random number for now)
         //////////////// TEMPERATURE ////////////////
         //temperature = getRandomNumber(34, 40); // TODO: remove this line
         temperature = readTemperatureFromLM35(); // TODO: uncomment this line
@@ -192,9 +173,7 @@ void loop() {
         temperatureCelsiusCharacteristics.notify();
 
         //////////////// SATURATION and PULSE ////////////////
-        //pox.update();
         saturation = getRandomNumber(90, 100); // TODO: remove this line
-        //saturation = pox.getSpO2(); // TODO: uncomment this line
         static char saturationTemp[6];
         dtostrf(saturation, 6, 2, saturationTemp);
         //Set saturation Characteristic value and notify connected client
@@ -202,7 +181,6 @@ void loop() {
         saturationCharacteristics.notify();
 
         pulse = getRandomNumber(60, 100); // TODO: remove this line
-        //pulse = pox.getHeartRate(); // TODO: uncomment this line
         static char pulseTemp[6];
         dtostrf(pulse, 6, 2, pulseTemp);
         //Set pulse Characteristic value and notify connected client
@@ -225,7 +203,6 @@ void loop() {
         lastTime = millis();
       }
       //////////////// ALCOHOL ////////////////
-      // TODO: Handle reading from alcohol sensor on button click
       int pushButtonState = digitalRead(pushButtonPin);
       if (pushButtonState == HIGH && millis() - lastTimeAlcoholMeasured > timeToMeasureAlcohol) {
         lastTimeAlcoholMeasured = millis();     
@@ -234,8 +211,8 @@ void loop() {
         Serial.println("Now measuring alcohol until the LED is ON");     
       }
       if (millis() - lastTimeAlcoholMeasured <= timeToMeasureAlcohol && measuringAlcohol == true) {
-        alcohol = getRandomNumber(0, 1); // TODO: remove this line
-        //alcohol = analogRead(MQ3analogIn); // TODO: uncomment this line
+        //alcohol = getRandomNumber(0, 1); // TODO: remove this line
+        alcohol = analogRead(MQ3analogIn); // TODO: uncomment this line
         static char alcoholTemp[6];
         dtostrf(alcohol, 6, 2, alcoholTemp);
         //Set alcohol Characteristic value and notify connected client
