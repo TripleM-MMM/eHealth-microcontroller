@@ -5,7 +5,6 @@
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include "MAX30105.h"
-
 #include "heartRate.h"
 
 
@@ -53,6 +52,8 @@ unsigned long timeToMeasureAlcohol = 5000;
 // Led to show measuring alcohol
 const int ledPin = 2;
 bool measuringAlcohol = false;
+int alcoMeasures = 0;
+float alcoholSum = 0;
 
 bool deviceConnected = false;
 
@@ -91,16 +92,16 @@ class MyServerCallbacks: public BLEServerCallbacks {
 void initSensors(){
   Serial.println("Initializing pulse oximeter...");
   // if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) //Use default I2C port, 400kHz speed
-    // {
-    //   Serial.println("MAX30102 was not found. Please check wiring/power. ");
-    //   while (1);
-    // }
-    // Serial.println("Place your index finger on the sensor with steady pressure.");
+  //   {
+  //     Serial.println("MAX30102 was not found. Please check wiring/power. ");
+  //     while (1);
+  //   }
+  // Serial.println("Place your index finger on the sensor with steady pressure.");
 
-    // particleSensor.setup(); //Configure sensor with default settings
-    // particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
-    // particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
-    //
+  // particleSensor.setup(); //Configure sensor with default settings
+  // particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
+  // particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
+    
 
   Serial.println("MQ3 is warming up...");
   delay(120000);  //2 min warm up time
@@ -212,23 +213,36 @@ void loop() {
       }
       if (millis() - lastTimeAlcoholMeasured <= timeToMeasureAlcohol && measuringAlcohol == true) {
         //alcohol = getRandomNumber(0, 1); // TODO: remove this line
-        alcohol = analogRead(MQ3analogIn); // TODO: uncomment this line
-        static char alcoholTemp[6];
-        dtostrf(alcohol, 6, 2, alcoholTemp);
-        //Set alcohol Characteristic value and notify connected client
-        alcoholCharacteristics.setValue(alcoholTemp);
-        alcoholCharacteristics.notify(); 
-
-        Serial.println("==================================");  
+        float tmpAlcohol = analogRead(MQ3analogIn); // TODO: uncomment this line
+        Serial.println("===============");  
         Serial.print("Alcohol: ");
-        Serial.print(alcohol);
+        Serial.print(tmpAlcohol);
         // Serial.println(" BAC");
-        Serial.println("==================================");
+        Serial.println("===============");
+        alcoholSum += tmpAlcohol; // TODO: uncomment this line
+        alcoMeasures++;        
       } else {
         digitalWrite(ledPin, LOW);
         measuringAlcohol = false;        
+        if (alcoMeasures != 0) {
+          alcohol = alcoholSum / alcoMeasures;
+          static char alcoholTemp[6];
+          dtostrf(alcohol, 6, 2, alcoholTemp);
+          //Set alcohol Characteristic value and notify connected client
+          alcoholCharacteristics.setValue(alcoholTemp);
+          alcoholCharacteristics.notify(); 
+
+          Serial.println("==================================");  
+          Serial.print("Average Alcohol: ");
+          Serial.print(alcohol);
+          // Serial.println(" BAC");
+          Serial.println("==================================");
+          alcoholSum = 0;
+          alcoMeasures = 0;
+        }
       }
-      //
+      
+      // BEATS
       // long irValue = particleSensor.getIR();
 
       // if (checkForBeat(irValue) == true)
