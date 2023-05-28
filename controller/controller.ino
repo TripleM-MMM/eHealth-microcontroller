@@ -4,16 +4,19 @@
 #include <BLE2902.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
-#include "MAX30105.h"
-#include "heartRate.h"
+#include "DFRobot_BloodOxygen_S.h"
 
+#define I2C_COMMUNICATION  //use I2C for communication, but use the serial port for communication if the line of codes were masked
+
+#define I2C_ADDRESS    0x57
+DFRobot_BloodOxygen_S_I2C MAX30102(&Wire ,I2C_ADDRESS);
 
 // BLE server name
 #define bleServerName "ESP32_BLE_SERVER"
 
 // Timer variables
 unsigned long lastTime = 0;
-unsigned long timerDelay = 30000;
+unsigned long timerDelay = 10000;
 
 // Sensor measures variables
 float temperature; // from LM35
@@ -26,15 +29,6 @@ const int LM35analogIn = A6;
 int LM35RawValue= 0;
 float LM35Voltage = 0;
 float LM35tempC = 0;
-
-// MAX30102 variables
-MAX30105 particleSensor;
-const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
-byte rates[RATE_SIZE]; //Array of heart rates
-byte rateSpot = 0;
-long lastBeat = 0; //Time at which the last beat occurred
-float beatsPerMinute;
-int beatAvg;
 
 // Callback routine is executed when a pulse is detected
 void onBeatDetected() {
@@ -91,20 +85,17 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 void initSensors(){
   Serial.println("Initializing pulse oximeter...");
-  // if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) //Use default I2C port, 400kHz speed
-  //   {
-  //     Serial.println("MAX30102 was not found. Please check wiring/power. ");
-  //     while (1);
-  //   }
-  // Serial.println("Place your index finger on the sensor with steady pressure.");
-
-  // particleSensor.setup(); //Configure sensor with default settings
-  // particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
-  // particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
-    
+  while (false == MAX30102.begin())
+  {
+    Serial.println("init fail!");
+    delay(1000);
+  }
+  Serial.println("init success!");
+  Serial.println("start measuring...");
+  MAX30102.sensorStartCollect();
 
   Serial.println("MQ3 is warming up...");
-  delay(120000);  //2 min warm up time
+  //delay(120000);  //2 min warm up time
 
   // Declare pushButtonPin as digital input 
   pinMode(pushButtonPin, INPUT);
@@ -174,26 +165,34 @@ void loop() {
         temperatureCelsiusCharacteristics.notify();
 
         //////////////// SATURATION and PULSE ////////////////
-        saturation = getRandomNumber(90, 100); // TODO: remove this line
-        static char saturationTemp[6];
-        dtostrf(saturation, 6, 2, saturationTemp);
-        //Set saturation Characteristic value and notify connected client
-        saturationCharacteristics.setValue(saturationTemp);
-        saturationCharacteristics.notify();
+        MAX30102.getHeartbeatSPO2();
 
-        pulse = getRandomNumber(60, 100); // TODO: remove this line
-        static char pulseTemp[6];
-        dtostrf(pulse, 6, 2, pulseTemp);
-        //Set pulse Characteristic value and notify connected client
-        pulseCharacteristics.setValue(pulseTemp);
-        pulseCharacteristics.notify();
+        //saturation = getRandomNumber(90, 100); // TODO: remove this line
+        saturation = MAX30102._sHeartbeatSPO2.SPO2;
+        if (saturation != -1) {
+          static char saturationTemp[6];
+          dtostrf(saturation, 6, 2, saturationTemp);
+          //Set saturation Characteristic value and notify connected client
+          saturationCharacteristics.setValue(saturationTemp);
+          saturationCharacteristics.notify();
+        }
+
+        //pulse = getRandomNumber(60, 100); // TODO: remove this line
+        pulse = MAX30102._sHeartbeatSPO2.Heartbeat;
+        if (pulse != -1) {
+          static char pulseTemp[6];
+          dtostrf(pulse, 6, 2, pulseTemp);
+          //Set pulse Characteristic value and notify connected client
+          pulseCharacteristics.setValue(pulseTemp);
+          pulseCharacteristics.notify();
+        }
 
         // Print the sensors values
         Serial.println("==================================");
         Serial.print("Temperature: ");
         Serial.print(temperature);
         Serial.println(" ºC");
-        Serial.print("Saturation: ");
+        Serial.print("Saturation (SPO2): ");
         Serial.print(saturation);
         Serial.println(" %");
         Serial.print("Pulse: ");
@@ -216,10 +215,10 @@ void loop() {
         float tmpAlcohol = analogRead(MQ3analogIn); // TODO: uncomment this line
         Serial.println("===============");  
         Serial.print("Alcohol: ");
-        Serial.print(tmpAlcohol);
+        Serial.println(tmpAlcohol);
         // Serial.println(" BAC");
         Serial.println("===============");
-        alcoholSum += tmpAlcohol; // TODO: uncomment this line
+        alcoholSum += tmpAlcohol;
         alcoMeasures++;        
       } else {
         digitalWrite(ledPin, LOW);
@@ -234,49 +233,13 @@ void loop() {
 
           Serial.println("==================================");  
           Serial.print("Average Alcohol: ");
-          Serial.print(alcohol);
+          Serial.println(alcohol);
           // Serial.println(" BAC");
           Serial.println("==================================");
           alcoholSum = 0;
           alcoMeasures = 0;
         }
       }
-      
-      // BEATS
-      // long irValue = particleSensor.getIR();
-
-      // if (checkForBeat(irValue) == true)
-      // {
-      //   //We sensed a beat!
-      //   long delta = millis() - lastBeat;
-      //   lastBeat = millis();
-
-      //   beatsPerMinute = 60 / (delta / 1000.0);
-
-      //   if (beatsPerMinute < 255 && beatsPerMinute > 20)
-      //   {
-      //     rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
-      //     rateSpot %= RATE_SIZE; //Wrap variable
-
-      //     //Take average of readings
-      //     beatAvg = 0;
-      //     for (byte x = 0 ; x < RATE_SIZE ; x++)
-      //       beatAvg += rates[x];
-      //     beatAvg /= RATE_SIZE;
-      //   }
-      // }
-
-      // Serial.print("IR=");
-      // Serial.print(irValue);
-      // Serial.print(", BPM=");
-      // Serial.print(beatsPerMinute);
-      // Serial.print(", Avg BPM=");
-      // Serial.print(beatAvg);
-
-      // if (irValue < 50000)
-      //   Serial.print(" No finger?");
-
-      // Serial.println();
   }
   delay(1000);
 }
